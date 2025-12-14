@@ -1,0 +1,170 @@
+package com.you.weplayauto;
+
+import android.accessibilityservice.AccessibilityServiceInfo;
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.media.projection.MediaProjectionManager;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.provider.Settings;
+import android.util.Log;
+import android.view.accessibility.AccessibilityManager;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.Switch;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
+
+import java.util.List;
+
+/**
+ * MainActivity: UI chính để quản lý:
+ * - bật/tắt Accessibility (mở setting)
+ * - bật nút nổi (FloatingButtonService) (yêu cầu overlay)
+ * - bật ghi màn hình (yêu cầu MediaProjection permission)
+ * - cấu hình Webhook Discord (lưu vào SharedPreferences)
+ *
+ * Target/compile SDK = 29 (Android 10)
+ */
+public class MainActivity extends AppCompatActivity {
+
+    private static final int REQUEST_OVERLAY_PERMISSION = 1234;
+    private static final int REQUEST_SCREEN_CAPTURE = 100;
+    private static final String PREFS_NAME = "WePlayAutoPrefs";
+    private static final String WEBHOOK_KEY = "webhook_url";
+    private static final String DEFAULT_WEBHOOK = "YOUR_DEFAULT_WEBHOOK";
+
+    private Switch serviceSwitch;
+    private TextView statusText;
+    private Button btnFloating, btnCapture, btnSaveWebhook;
+    private EditText edtWebhook;
+    private SharedPreferences prefs;
+    private AccessibilityManager accessibilityManager;
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        // Activity layout: đảm bảo bạn có layout tương ứng (activity_main.xml)
+        setContentView(R.layout.activity_main);
+
+        prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        accessibilityManager = (AccessibilityManager) getSystemService(Context.ACCESSIBILITY_SERVICE);
+
+        serviceSwitch = findViewById(R.id.serviceSwitch);
+        statusText = findViewById(R.id.statusText);
+        btnFloating = findViewById(R.id.btnStartFloating);
+        btnCapture = findViewById(R.id.btnStartCapture);
+        btnSaveWebhook = findViewById(R.id.btnSaveWebhook);
+        edtWebhook = findViewById(R.id.edtWebhook);
+
+        // load webhook
+        String saved = prefs.getString(WEBHOOK_KEY, DEFAULT_WEBHOOK);
+        edtWebhook.setText(saved);
+
+        updateServiceStatus();
+
+        // listeners
+        serviceSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            // Mở setting Accessibility để người dùng bật/tắt
+            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+            Toast.makeText(this, "Vui lòng bật/tắt WePlay Auto trong Trợ năng", Toast.LENGTH_LONG).show();
+        });
+
+        btnFloating.setOnClickListener(v -> requestOverlayIfNeeded());
+        btnCapture.setOnClickListener(v -> startScreenCaptureFlow());
+        btnSaveWebhook.setOnClickListener(v -> saveWebhook());
+    }
+
+    private void requestOverlayIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Vui lòng cấp quyền hiển thị trên ứng dụng khác", Toast.LENGTH_LONG).show();
+            Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + getPackageName()));
+            startActivityForResult(intent, REQUEST_OVERLAY_PERMISSION);
+        } else {
+            Intent i = new Intent(this, FloatingButtonService.class);
+            startService(i);
+            Toast.makeText(this, "✅ Nút nổi đã bật", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void startScreenCaptureFlow() {
+        String webhook = edtWebhook.getText().toString().trim();
+        if (webhook.isEmpty() || !webhook.startsWith("https://")) {
+            Toast.makeText(this, "Vui lòng nhập Webhook hợp lệ trước", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        // Lưu webhook tạm để service dùng nếu cần
+        prefs.edit().putString(WEBHOOK_KEY, webhook).apply();
+
+        // gọi MediaProjection permission
+        MediaProjectionManager mgr = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+        Intent captureIntent = mgr.createScreenCaptureIntent();
+        startActivityForResult(captureIntent, REQUEST_SCREEN_CAPTURE);
+    }
+
+    private void saveWebhook() {
+        String url = edtWebhook.getText().toString().trim();
+        if (url.isEmpty() || !url.startsWith("https://discord.com/api/webhooks/")) {
+            Toast.makeText(this, "URL không hợp lệ. Phải bắt đầu bằng https://discord.com/api/webhooks/", Toast.LENGTH_LONG).show();
+            return;
+        }
+        prefs.edit().putString(WEBHOOK_KEY, url).apply();
+        Toast.makeText(this, "✅ Đã lưu Webhook", Toast.LENGTH_SHORT).show();
+    }
+
+    private void updateServiceStatus() {
+        boolean enabled = false;
+        try {
+            List<AccessibilityServiceInfo> list = accessibilityManager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
+            for (AccessibilityServiceInfo info : list) {
+                if (info.getId().contains(getPackageName())) {
+                    enabled = true;
+                    break;
+                }
+            }
+        } catch (Exception ignored) {}
+        serviceSwitch.setChecked(enabled);
+        statusText.setText(enabled ? "✓ Service đang hoạt động" : "✗ Service chưa bật");
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_OVERLAY_PERMISSION) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)) {
+                Intent i = new Intent(this, FloatingButtonService.class);
+                startService(i);
+                Toast.makeText(this, "✅ Đã cấp quyền overlay và bật nút nổi", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "❌ Cần cấp phép overlay để bật nút nổi", Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
+
+        if (requestCode == REQUEST_SCREEN_CAPTURE) {
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                // Gửi resultCode + data vào service. BẮT BUỘC dùng startForegroundService trên API>=26
+                Intent i = new Intent(this, ScreenCaptureService.class);
+                i.putExtra("resultCode", resultCode);
+                i.putExtra("data", data);
+                // truyền webhook đã lưu
+                i.putExtra("webhook_url", prefs.getString(WEBHOOK_KEY, DEFAULT_WEBHOOK));
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(i);
+                } else {
+                    startService(i);
+                }
+                Toast.makeText(this, "🎥 Đang khởi động ghi màn hình...", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "❌ Người dùng đã từ chối quyền ghi màn hình", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+}

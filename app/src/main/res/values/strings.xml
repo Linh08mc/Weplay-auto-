@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">WePlay Auto</string>
+    <string name="accessibility_service_description">Tự động hóa WePlay</string>
+</resources>

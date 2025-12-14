@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/floatingContainer"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="#4CAF50"
+    android:padding="12dp"
+    android:orientation="vertical"
+    android:visibility="gone"
+    android:elevation="10dp"
+    android:gravity="center">
+
+    <TextView
+        android:id="@+id/tvNotification"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="WePlay Auto"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+</LinearLayout>

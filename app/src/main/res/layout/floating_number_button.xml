@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/numberLabel"
+    android:layout_width="60dp"
+    android:layout_height="60dp"
+    android:background="@drawable/floating_bg"
+    android:text="S1"
+    android:textColor="#FFFFFF"
+    android:textSize="20sp"
+    android:gravity="center"
+    android:layout_margin="4dp" />
